@@ -112,7 +112,14 @@ export function generateInvoicePDF(invoice: Invoice): Buffer {
 
   doc.text(`IVA (${Math.round(invoice.iva_rate * 100)}%)`, xLabel, y, { align: "right" });
   doc.text(`${invoice.iva_amount.toLocaleString("fr-FR", { minimumFractionDigits: 2 })} €`, xVal, y, { align: "right" });
-  y += 4;
+  y += 5;
+
+  // IRPF (optional)
+  if (invoice.irpf_rate > 0) {
+    doc.text(`Retención IRPF (${Math.round(invoice.irpf_rate * 100)}%)`, xLabel, y, { align: "right" });
+    doc.text(`-${invoice.irpf_amount.toLocaleString("fr-FR", { minimumFractionDigits: 2 })} €`, xVal, y, { align: "right" });
+    y += 5;
+  }
 
   // Line
   doc.setDrawColor(30, 31, 54);

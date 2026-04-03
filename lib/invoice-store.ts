@@ -32,6 +32,8 @@ export interface Invoice {
   base: number;
   iva_rate: number;
   iva_amount: number;
+  irpf_rate: number;
+  irpf_amount: number;
   total: number;
   status: "draft" | "emitted" | "paid" | "overdue";
   notes: string;
@@ -95,6 +97,7 @@ export function createInvoice(data: {
   items: InvoiceItem[];
   notes?: string;
   recurring?: "monthly" | "quarterly" | "yearly" | null;
+  irpf_rate?: number;
 }): Invoice | null {
   const client = getClient(data.client_id);
   if (!client) return null;
@@ -109,7 +112,9 @@ export function createInvoice(data: {
 
   const base = data.items.reduce((sum, item) => sum + item.quantity * item.unit_price, 0);
   const iva_amount = Math.round(base * IVA_RATE * 100) / 100;
-  const total = Math.round((base + iva_amount) * 100) / 100;
+  const irpf_rate = data.irpf_rate || 0;
+  const irpf_amount = Math.round(base * irpf_rate * 100) / 100;
+  const total = Math.round((base + iva_amount - irpf_amount) * 100) / 100;
 
   const invoice: Invoice = {
     id: `inv_${Date.now()}`,
@@ -121,6 +126,8 @@ export function createInvoice(data: {
     base,
     iva_rate: IVA_RATE,
     iva_amount,
+    irpf_rate,
+    irpf_amount,
     total,
     status: "emitted",
     notes: data.notes || "",

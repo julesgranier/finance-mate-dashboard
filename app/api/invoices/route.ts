@@ -41,6 +41,7 @@ export async function POST(request: NextRequest) {
     items,
     notes: body.notes || "",
     recurring: body.recurring || null,
+    irpf_rate: body.irpf_rate || 0,
   });
 
   if (!invoice) {

@@ -28,6 +28,8 @@ interface Invoice {
   base: number;
   iva_rate: number;
   iva_amount: number;
+  irpf_rate: number;
+  irpf_amount: number;
   total: number;
   status: string;
   notes: string;
@@ -50,6 +52,7 @@ export default function InvoicesPage() {
   const [items, setItems] = useState<InvoiceItem[]>([{ concept: "", quantity: 1, unit_price: 0 }]);
   const [notes, setNotes] = useState("");
   const [recurring, setRecurring] = useState<string>("");
+  const [irpfRate, setIrpfRate] = useState<number>(0);
   const [creating, setCreating] = useState(false);
 
   // Create client form
@@ -75,6 +78,7 @@ export default function InvoicesPage() {
         items,
         notes,
         recurring: recurring || null,
+        irpf_rate: irpfRate,
       }),
     });
 
@@ -84,6 +88,7 @@ export default function InvoicesPage() {
       setItems([{ concept: "", quantity: 1, unit_price: 0 }]);
       setNotes("");
       setRecurring("");
+      setIrpfRate(0);
       setView("list");
     }
     setCreating(false);
@@ -120,9 +125,26 @@ export default function InvoicesPage() {
     }
   }
 
+  async function checkPayments() {
+    const res = await fetch("/api/invoices/check-payments", { method: "POST" });
+    if (res.ok) {
+      const data = await res.json();
+      // Refresh invoice list
+      const listRes = await fetch("/api/invoices");
+      const listData = await listRes.json();
+      setInvoices(listData.invoices || []);
+      if (data.matched > 0) {
+        alert(`${data.matched} facture(s) marquée(s) comme payée(s)`);
+      } else {
+        alert("Aucun nouveau paiement détecté");
+      }
+    }
+  }
+
   const base = items.reduce((s, i) => s + i.quantity * i.unit_price, 0);
   const iva = Math.round(base * IVA * 100) / 100;
-  const total = Math.round((base + iva) * 100) / 100;
+  const irpf = Math.round(base * irpfRate * 100) / 100;
+  const total = Math.round((base + iva - irpf) * 100) / 100;
 
   const inputClass = "bg-transparent border border-[#2A2A2E] text-white text-[14px] px-3 py-2.5 rounded-lg focus:outline-none focus:border-[#555] transition-colors duration-150 w-full";
   const labelClass = "text-[12px] text-[#6B7280] mb-1 block";
@@ -169,6 +191,12 @@ export default function InvoicesPage() {
                 className={`text-[14px] px-4 py-2 rounded-[20px] transition-colors duration-150 cursor-pointer ${view === "list" ? "bg-white text-black" : "border border-[#333] text-white hover:bg-[#1E1E22]"}`}
               >
                 Historique
+              </button>
+              <button
+                onClick={checkPayments}
+                className="text-[14px] px-4 py-2 rounded-[20px] border border-[#333] text-[#4ADE80] hover:bg-[#1E1E22] transition-colors duration-150 cursor-pointer"
+              >
+                Vérifier paiements Qonto
               </button>
             </div>
           </div>
@@ -268,7 +296,7 @@ export default function InvoicesPage() {
 
               {/* Options */}
               <div className="bg-[#1A1A1E] rounded-xl p-6">
-                <div className="grid grid-cols-2 gap-6">
+                <div className="grid grid-cols-3 gap-6">
                   <div>
                     <label className={labelClass}>Récurrence</label>
                     <select
@@ -280,6 +308,19 @@ export default function InvoicesPage() {
                       <option value="monthly">Mensuelle</option>
                       <option value="quarterly">Trimestrielle</option>
                       <option value="yearly">Annuelle</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className={labelClass}>Retención IRPF</label>
+                    <select
+                      value={irpfRate}
+                      onChange={(e) => setIrpfRate(parseFloat(e.target.value))}
+                      className={`${inputClass} [color-scheme:dark]`}
+                    >
+                      <option value={0}>Sin retención</option>
+                      <option value={0.07}>7% (inicio actividad)</option>
+                      <option value={0.15}>15% (estándar)</option>
+                      <option value={0.19}>19% (profesionales)</option>
                     </select>
                   </div>
                   <div>
@@ -315,8 +356,14 @@ export default function InvoicesPage() {
                     </div>
                     <div className="flex justify-between gap-8 text-[14px] text-[#9CA3AF]">
                       <span>IVA 21%</span>
-                      <span className="text-white">{money(iva)} €</span>
+                      <span className="text-white">+{money(iva)} €</span>
                     </div>
+                    {irpfRate > 0 && (
+                      <div className="flex justify-between gap-8 text-[14px] text-[#9CA3AF]">
+                        <span>Retención IRPF {Math.round(irpfRate * 100)}%</span>
+                        <span className="text-[#F87171]">-{money(irpf)} €</span>
+                      </div>
+                    )}
                     <div className="border-t border-[#2A2A2E] pt-2 mt-2 flex justify-between gap-8 text-[18px] font-bold">
                       <span className="text-[#9CA3AF]">Total</span>
                       <span className="text-[#E5B73B]">{money(total)} €</span>
