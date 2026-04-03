@@ -46,10 +46,18 @@ export async function POST(request: NextRequest) {
 
     const lines: string[] = [];
 
-    lines.push(`MATE — FINANCE TRACKER ${monthParam},,,,,`);
+    // ═══════════════════════════════════════════
+    // SECTION 1 — SUMMARY (Budget vs Actual)
+    // ═══════════════════════════════════════════
+    lines.push(`MATE — FINANCE TRACKER ${monthParam}`);
     lines.push("");
-    lines.push("Category,Budget (€),Actual (€),Variance (€),% Used,Date,Counterparty");
+    lines.push("═══ SUMMARY ═══");
     lines.push("");
+    lines.push("Catégorie,Budget (€),Actual (€),Variance (€),% Utilisé");
+    lines.push("");
+
+    let totalBudget = 0;
+    let totalActual = 0;
 
     for (const section of SECTIONS) {
       lines.push(section.header);
@@ -61,51 +69,99 @@ export async function POST(request: NextRequest) {
         const key = `${section.key}|${item}`;
         const a = actuals[key] || 0;
         const v = b - a;
-        const txs = details[key] || [];
         secBudget += b;
         secActual += a;
 
-        if (txs.length === 0) {
-          // No transactions — single line
+        lines.push(
+          [esc(`  ${item}`), money(b), money(a), money(v), pct(a, b)].join(",")
+        );
+      }
+
+      const secVar = secBudget - secActual;
+      lines.push(
+        [section.total, money(secBudget), money(secActual), money(secVar), pct(secActual, secBudget)].join(",")
+      );
+      lines.push("");
+
+      totalBudget += secBudget;
+      totalActual += secActual;
+    }
+
+    lines.push([
+      "TOTAL ALL COSTS",
+      money(totalBudget),
+      money(totalActual),
+      money(totalBudget - totalActual),
+      pct(totalActual, totalBudget),
+    ].join(","));
+    lines.push("");
+
+    // Uncategorized in summary
+    const uncategorized = categorized.filter(
+      (t) => t.category === "UNCATEGORIZED" && t.side === "debit"
+    );
+    if (uncategorized.length > 0) {
+      const uncatTotal = uncategorized.reduce((s, t) => s + t.amount, 0);
+      lines.push(`⚠ UNCATEGORIZED (${uncategorized.length} tx — ${money(uncatTotal)})`);
+      for (const tx of uncategorized) {
+        const name = tx.counterparty_name || tx.label || "inconnu";
+        const note = tx.categorizer_note || "";
+        const date = (tx.date || "").slice(0, 10);
+        lines.push([esc(`  ${name}`), "", money(tx.amount), date, note].join(","));
+      }
+      lines.push("");
+    }
+
+    // ═══════════════════════════════════════════
+    // SECTION 2 — DÉTAIL DES TRANSACTIONS
+    // ═══════════════════════════════════════════
+    lines.push("");
+    lines.push("═══ DÉTAIL DES TRANSACTIONS ═══");
+    lines.push("");
+    lines.push("Catégorie,Fournisseur,Montant (€),Date,Type");
+    lines.push("");
+
+    for (const section of SECTIONS) {
+      let sectionHasTx = false;
+
+      for (const item of section.items) {
+        const key = `${section.key}|${item}`;
+        const txs = details[key];
+        if (!txs || txs.length === 0) continue;
+
+        if (!sectionHasTx) {
+          lines.push(section.header);
+          sectionHasTx = true;
+        }
+
+        if (txs.length === 1) {
           lines.push(
-            [esc(`  ${item}`), money(b), money(a), money(v), pct(a, b), "", ""].join(",")
-          );
-        } else if (txs.length === 1) {
-          // Single transaction — inline date + counterparty
-          lines.push(
-            [esc(`  ${item}`), money(b), money(a), money(v), pct(a, b), txs[0].date, esc(txs[0].counterparty)].join(",")
+            [esc(`  ${item}`), esc(txs[0].counterparty || "—"), money(txs[0].amount), txs[0].date, ""].join(",")
           );
         } else {
-          // Multiple transactions — category totals then detail lines
+          const total = txs.reduce((s, t) => s + t.amount, 0);
           lines.push(
-            [esc(`  ${item}`), money(b), money(a), money(v), pct(a, b), "", `${txs.length} transactions`].join(",")
+            [esc(`  ${item}`), `${txs.length} transactions`, money(total), "", ""].join(",")
           );
-          for (const tx of txs) {
+          for (const tx of txs.sort((a, b) => a.date.localeCompare(b.date))) {
             lines.push(
-              [esc(`      ↳ ${tx.counterparty || "—"}`), "", money(tx.amount), "", "", tx.date, ""].join(",")
+              [esc(`      ${tx.counterparty || "—"}`), "", money(tx.amount), tx.date, ""].join(",")
             );
           }
         }
       }
 
-      const secVar = secBudget - secActual;
-      lines.push(
-        [section.total, money(secBudget), money(secActual), money(secVar), pct(secActual, secBudget), "", ""].join(",")
-      );
-      lines.push("");
+      if (sectionHasTx) lines.push("");
     }
 
-    // Uncategorized
-    const uncategorized = categorized.filter(
-      (t) => t.category === "UNCATEGORIZED" && t.side === "debit"
-    );
+    // Uncategorized detail
     if (uncategorized.length > 0) {
-      lines.push(`UNCATEGORIZED (${uncategorized.length} transactions)`);
+      lines.push("UNCATEGORIZED");
       for (const tx of uncategorized) {
-        const name = tx.counterparty_name || tx.label || "unknown";
-        const note = tx.categorizer_note || "";
+        const name = tx.counterparty_name || tx.label || "inconnu";
         const date = (tx.date || "").slice(0, 10);
-        lines.push([esc(`  ${name}`), "", money(tx.amount), "", note, date, ""].join(","));
+        const note = tx.categorizer_note || "";
+        lines.push([esc(`  ${name}`), note, money(tx.amount), date, tx.operation_type || ""].join(","));
       }
     }
 
