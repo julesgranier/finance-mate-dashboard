@@ -191,6 +191,12 @@ export function getBudget(sectionKey: string, item: string): number {
   return BUDGET[item] ?? 0;
 }
 
+export interface TxDetail {
+  date: string;
+  amount: number;
+  counterparty: string;
+}
+
 export function aggregateActuals(transactions: CategorizedTransaction[]): Record<string, number> {
   const agg: Record<string, number> = {};
   for (const tx of transactions) {
@@ -199,4 +205,19 @@ export function aggregateActuals(transactions: CategorizedTransaction[]): Record
     agg[key] = (agg[key] || 0) + tx.amount;
   }
   return agg;
+}
+
+export function aggregateDetails(transactions: CategorizedTransaction[]): Record<string, TxDetail[]> {
+  const details: Record<string, TxDetail[]> = {};
+  for (const tx of transactions) {
+    if (tx.side !== "debit") continue;
+    const key = `${tx.section}|${tx.category}`;
+    if (!details[key]) details[key] = [];
+    details[key].push({
+      date: (tx.date || "").slice(0, 10),
+      amount: tx.amount,
+      counterparty: tx.counterparty_name || tx.label || "",
+    });
+  }
+  return details;
 }

@@ -3,6 +3,7 @@ import { getTransactions } from "@/lib/qonto";
 import {
   categorizeTransactions,
   aggregateActuals,
+  aggregateDetails,
   SECTIONS,
   getBudget,
 } from "@/lib/categorizer";
@@ -41,12 +42,13 @@ export async function POST(request: NextRequest) {
     const transactions = await getTransactions(month, year);
     const categorized = categorizeTransactions(transactions);
     const actuals = aggregateActuals(categorized);
+    const details = aggregateDetails(categorized);
 
     const lines: string[] = [];
 
-    lines.push(`MATE — FINANCE TRACKER ${monthParam},,,,`);
+    lines.push(`MATE — FINANCE TRACKER ${monthParam},,,,,`);
     lines.push("");
-    lines.push("Category,Budget (€),Actual (€),Variance (€),% Used");
+    lines.push("Category,Budget (€),Actual (€),Variance (€),% Used,Date,Counterparty");
     lines.push("");
 
     for (const section of SECTIONS) {
@@ -56,19 +58,39 @@ export async function POST(request: NextRequest) {
 
       for (const item of section.items) {
         const b = getBudget(section.key, item);
-        const a = actuals[`${section.key}|${item}`] || 0;
+        const key = `${section.key}|${item}`;
+        const a = actuals[key] || 0;
         const v = b - a;
+        const txs = details[key] || [];
         secBudget += b;
         secActual += a;
 
-        lines.push(
-          [esc(`  ${item}`), money(b), money(a), money(v), pct(a, b)].join(",")
-        );
+        if (txs.length === 0) {
+          // No transactions — single line
+          lines.push(
+            [esc(`  ${item}`), money(b), money(a), money(v), pct(a, b), "", ""].join(",")
+          );
+        } else if (txs.length === 1) {
+          // Single transaction — inline date + counterparty
+          lines.push(
+            [esc(`  ${item}`), money(b), money(a), money(v), pct(a, b), txs[0].date, esc(txs[0].counterparty)].join(",")
+          );
+        } else {
+          // Multiple transactions — category totals then detail lines
+          lines.push(
+            [esc(`  ${item}`), money(b), money(a), money(v), pct(a, b), "", `${txs.length} transactions`].join(",")
+          );
+          for (const tx of txs) {
+            lines.push(
+              [esc(`      ↳ ${tx.counterparty || "—"}`), "", money(tx.amount), "", "", tx.date, ""].join(",")
+            );
+          }
+        }
       }
 
       const secVar = secBudget - secActual;
       lines.push(
-        [section.total, money(secBudget), money(secActual), money(secVar), pct(secActual, secBudget)].join(",")
+        [section.total, money(secBudget), money(secActual), money(secVar), pct(secActual, secBudget), "", ""].join(",")
       );
       lines.push("");
     }
@@ -82,7 +104,8 @@ export async function POST(request: NextRequest) {
       for (const tx of uncategorized) {
         const name = tx.counterparty_name || tx.label || "unknown";
         const note = tx.categorizer_note || "";
-        lines.push([esc(`  ${name}`), "", money(tx.amount), "", note].join(","));
+        const date = (tx.date || "").slice(0, 10);
+        lines.push([esc(`  ${name}`), "", money(tx.amount), "", note, date, ""].join(","));
       }
     }
 
