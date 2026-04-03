@@ -159,10 +159,10 @@ export default function Dashboard() {
         const url = window.URL.createObjectURL(blob);
         const a = document.createElement("a");
         a.href = url;
-        a.download = `finance_${month}.csv`;
+        a.download = `finance_${month}.xlsx`;
         a.click();
         window.URL.revokeObjectURL(url);
-        log(`finance_${month}.csv téléchargé`, "success");
+        log(`finance_${month}.xlsx téléchargé`, "success");
       }
     } catch {
       log("Échec export", "error");

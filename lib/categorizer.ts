@@ -1,6 +1,6 @@
 import { Transaction } from "./qonto";
 
-// ── Category rules (mirrors categories.json) ──
+// ── Category rules ──
 
 const SALARY_RULES: Record<string, string[]> = {
   "Co-CEO G.C (Guille)": ["guillermo", "guille"],
@@ -73,15 +73,39 @@ const OTHER_RULES: Record<string, string[]> = {
   "Contingencies": [],
 };
 
-const ONSITE_CITIES = ["BARCELONA", "PARIS", "MADRID", "IBIZA"];
+// Only Barcelona and Paris for now
+const ONSITE_CITIES = ["BARCELONA", "PARIS"];
 const ONSITE_ITEMS = ["Influencers", "PR (commission)", "Merch on-site", "Ads", "Contingencies"];
 
 const ADS_KEYWORDS = ["meta", "facebook", "instagram", "google ads", "tiktok ads", "tiktok"];
 
-interface CategorizedTransaction extends Transaction {
+// Qonto card names → city mapping
+// When Jules creates dedicated cards "Carte Barcelona" / "Carte Paris" on Qonto,
+// transactions on those cards will auto-route to the right city.
+const CARD_CITY_MAP: Record<string, string> = {
+  "barcelona": "BARCELONA",
+  "bcn": "BARCELONA",
+  "paris": "PARIS",
+};
+
+export interface CategorizedTransaction extends Transaction {
   section: string;
   category: string;
   categorizer_note?: string;
+}
+
+function detectCity(tx: Transaction): string | null {
+  // Check card label, note, and counterparty for city hints
+  const fields = [
+    tx.label || "",
+    tx.note || "",
+    tx.counterparty_name || "",
+  ].join(" ").toLowerCase();
+
+  for (const [keyword, city] of Object.entries(CARD_CITY_MAP)) {
+    if (fields.includes(keyword)) return city;
+  }
+  return null;
 }
 
 function categorizeOne(tx: Transaction): { section: string; category: string; note?: string } {
@@ -103,15 +127,8 @@ function categorizeOne(tx: Transaction): { section: string; category: string; no
   // Ads ambiguity
   for (const kw of ADS_KEYWORDS) {
     if (text.includes(kw)) {
-      const noteText = (tx.note || "").toLowerCase();
-      const full = `${text} ${noteText}`;
-      const cityMap: [string, string][] = [
-        ["barcelona", "BARCELONA"], ["bcn", "BARCELONA"],
-        ["paris", "PARIS"], ["madrid", "MADRID"], ["ibiza", "IBIZA"],
-      ];
-      for (const [key, city] of cityMap) {
-        if (full.includes(key)) return { section: `ON-SITE COSTS - ${city}`, category: "Ads" };
-      }
+      const city = detectCity(tx);
+      if (city) return { section: `ON-SITE COSTS - ${city}`, category: "Ads" };
       return { section: "UNCATEGORIZED", category: "UNCATEGORIZED", note: "Ads — quelle ville ?" };
     }
   }
@@ -156,8 +173,6 @@ const BUDGET: Record<string, number> = {
 const BUDGET_ONSITE: Record<string, Record<string, number>> = {
   "ON-SITE COSTS - BARCELONA": { "Influencers": 2000, "PR (commission)": 230, "Merch on-site": 3000, "Ads": 2000, "Contingencies": 1000 },
   "ON-SITE COSTS - PARIS": { "Influencers": 0, "PR (commission)": 0, "Merch on-site": 3000, "Ads": 0, "Contingencies": 0 },
-  "ON-SITE COSTS - MADRID": { "Influencers": 0, "PR (commission)": 0, "Merch on-site": 0, "Ads": 0, "Contingencies": 0 },
-  "ON-SITE COSTS - IBIZA": { "Influencers": 0, "PR (commission)": 0, "Merch on-site": 0, "Ads": 0, "Contingencies": 0 },
 };
 
 export const SECTIONS = [
@@ -194,7 +209,7 @@ export function getBudget(sectionKey: string, item: string): number {
 export interface TxDetail {
   date: string;
   amount: number;
-  counterparty: string;
+  name: string;
 }
 
 export function aggregateActuals(transactions: CategorizedTransaction[]): Record<string, number> {
@@ -216,7 +231,7 @@ export function aggregateDetails(transactions: CategorizedTransaction[]): Record
     details[key].push({
       date: (tx.date || "").slice(0, 10),
       amount: tx.amount,
-      counterparty: tx.counterparty_name || tx.label || "",
+      name: tx.counterparty_name || tx.label || "",
     });
   }
   return details;

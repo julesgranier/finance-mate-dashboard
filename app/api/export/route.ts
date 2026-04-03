@@ -1,4 +1,5 @@
 import { NextRequest } from "next/server";
+import * as XLSX from "xlsx";
 import { getTransactions } from "@/lib/qonto";
 import {
   categorizeTransactions,
@@ -6,14 +7,8 @@ import {
   aggregateDetails,
   SECTIONS,
   getBudget,
+  type CategorizedTransaction,
 } from "@/lib/categorizer";
-
-function esc(val: string): string {
-  if (val.includes(",") || val.includes('"') || val.includes("\n")) {
-    return `"${val.replace(/"/g, '""')}"`;
-  }
-  return val;
-}
 
 function money(n: number): string {
   if (n === 0) return "-";
@@ -21,7 +16,7 @@ function money(n: number): string {
 }
 
 function pct(actual: number, budget: number): string {
-  if (budget === 0) return actual > 0 ? "100%" : "0%";
+  if (budget === 0) return actual > 0 ? "100%" : "-";
   return `${Math.round((actual / budget) * 100)}%`;
 }
 
@@ -44,23 +39,23 @@ export async function POST(request: NextRequest) {
     const actuals = aggregateActuals(categorized);
     const details = aggregateDetails(categorized);
 
-    const lines: string[] = [];
+    const wb = XLSX.utils.book_new();
 
-    // ═══════════════════════════════════════════
-    // SECTION 1 — SUMMARY (Budget vs Actual)
-    // ═══════════════════════════════════════════
-    lines.push(`MATE — FINANCE TRACKER ${monthParam}`);
-    lines.push("");
-    lines.push("═══ SUMMARY ═══");
-    lines.push("");
-    lines.push("Catégorie,Budget (€),Actual (€),Variance (€),% Utilisé");
-    lines.push("");
+    // ═══════════════════════════════════════
+    // SHEET 1 — SUMMARY
+    // ═══════════════════════════════════════
+    const summaryRows: (string | number)[][] = [];
+
+    summaryRows.push([`MATE — FINANCE TRACKER ${monthParam}`]);
+    summaryRows.push([]);
+    summaryRows.push(["Catégorie", "Budget (€)", "Actual (€)", "Variance (€)", "% Utilisé"]);
+    summaryRows.push([]);
 
     let totalBudget = 0;
     let totalActual = 0;
 
     for (const section of SECTIONS) {
-      lines.push(section.header);
+      summaryRows.push([section.header]);
       let secBudget = 0;
       let secActual = 0;
 
@@ -68,58 +63,44 @@ export async function POST(request: NextRequest) {
         const b = getBudget(section.key, item);
         const key = `${section.key}|${item}`;
         const a = actuals[key] || 0;
-        const v = b - a;
         secBudget += b;
         secActual += a;
-
-        lines.push(
-          [esc(`  ${item}`), money(b), money(a), money(v), pct(a, b)].join(",")
-        );
+        summaryRows.push([`  ${item}`, money(b), money(a), money(b - a), pct(a, b)]);
       }
 
-      const secVar = secBudget - secActual;
-      lines.push(
-        [section.total, money(secBudget), money(secActual), money(secVar), pct(secActual, secBudget)].join(",")
-      );
-      lines.push("");
-
+      summaryRows.push([section.total, money(secBudget), money(secActual), money(secBudget - secActual), pct(secActual, secBudget)]);
+      summaryRows.push([]);
       totalBudget += secBudget;
       totalActual += secActual;
     }
 
-    lines.push([
-      "TOTAL ALL COSTS",
-      money(totalBudget),
-      money(totalActual),
-      money(totalBudget - totalActual),
-      pct(totalActual, totalBudget),
-    ].join(","));
-    lines.push("");
+    summaryRows.push(["TOTAL ALL COSTS", money(totalBudget), money(totalActual), money(totalBudget - totalActual), pct(totalActual, totalBudget)]);
 
-    // Uncategorized in summary
     const uncategorized = categorized.filter(
-      (t) => t.category === "UNCATEGORIZED" && t.side === "debit"
+      (t: CategorizedTransaction) => t.category === "UNCATEGORIZED" && t.side === "debit"
     );
     if (uncategorized.length > 0) {
-      const uncatTotal = uncategorized.reduce((s, t) => s + t.amount, 0);
-      lines.push(`⚠ UNCATEGORIZED (${uncategorized.length} tx — ${money(uncatTotal)})`);
+      const uncatTotal = uncategorized.reduce((s: number, t: CategorizedTransaction) => s + t.amount, 0);
+      summaryRows.push([]);
+      summaryRows.push([`⚠ UNCATEGORIZED (${uncategorized.length} tx — ${money(uncatTotal)})`]);
       for (const tx of uncategorized) {
-        const name = tx.counterparty_name || tx.label || "inconnu";
-        const note = tx.categorizer_note || "";
-        const date = (tx.date || "").slice(0, 10);
-        lines.push([esc(`  ${name}`), "", money(tx.amount), date, note].join(","));
+        summaryRows.push([`  ${tx.counterparty_name || tx.label || "inconnu"}`, "", money(tx.amount), (tx.date || "").slice(0, 10), tx.categorizer_note || ""]);
       }
-      lines.push("");
     }
 
-    // ═══════════════════════════════════════════
-    // SECTION 2 — DÉTAIL DES TRANSACTIONS
-    // ═══════════════════════════════════════════
-    lines.push("");
-    lines.push("═══ DÉTAIL DES TRANSACTIONS ═══");
-    lines.push("");
-    lines.push("Catégorie,Fournisseur,Montant (€),Date,Type");
-    lines.push("");
+    const ws1 = XLSX.utils.aoa_to_sheet(summaryRows);
+    ws1["!cols"] = [{ wch: 35 }, { wch: 15 }, { wch: 15 }, { wch: 15 }, { wch: 12 }];
+    XLSX.utils.book_append_sheet(wb, ws1, "Summary");
+
+    // ═══════════════════════════════════════
+    // SHEET 2 — DÉTAIL
+    // ═══════════════════════════════════════
+    const detailRows: (string | number)[][] = [];
+
+    detailRows.push([`DÉTAIL DES TRANSACTIONS — ${monthParam}`]);
+    detailRows.push([]);
+    detailRows.push(["Catégorie", "Fournisseur", "Montant (€)", "Date"]);
+    detailRows.push([]);
 
     for (const section of SECTIONS) {
       let sectionHasTx = false;
@@ -130,48 +111,43 @@ export async function POST(request: NextRequest) {
         if (!txs || txs.length === 0) continue;
 
         if (!sectionHasTx) {
-          lines.push(section.header);
+          detailRows.push([section.header]);
           sectionHasTx = true;
         }
 
-        if (txs.length === 1) {
-          lines.push(
-            [esc(`  ${item}`), esc(txs[0].counterparty || "—"), money(txs[0].amount), txs[0].date, ""].join(",")
-          );
-        } else {
-          const total = txs.reduce((s, t) => s + t.amount, 0);
-          lines.push(
-            [esc(`  ${item}`), `${txs.length} transactions`, money(total), "", ""].join(",")
-          );
-          for (const tx of txs.sort((a, b) => a.date.localeCompare(b.date))) {
-            lines.push(
-              [esc(`      ${tx.counterparty || "—"}`), "", money(tx.amount), tx.date, ""].join(",")
-            );
-          }
+        // Sort by date
+        const sorted = [...txs].sort((a, b) => a.date.localeCompare(b.date));
+
+        for (const tx of sorted) {
+          detailRows.push([`  ${item}`, tx.name || "—", money(tx.amount), tx.date]);
         }
       }
 
-      if (sectionHasTx) lines.push("");
+      if (sectionHasTx) detailRows.push([]);
     }
 
     // Uncategorized detail
     if (uncategorized.length > 0) {
-      lines.push("UNCATEGORIZED");
+      detailRows.push(["⚠ UNCATEGORIZED"]);
       for (const tx of uncategorized) {
         const name = tx.counterparty_name || tx.label || "inconnu";
         const date = (tx.date || "").slice(0, 10);
-        const note = tx.categorizer_note || "";
-        lines.push([esc(`  ${name}`), note, money(tx.amount), date, tx.operation_type || ""].join(","));
+        detailRows.push([`  ${tx.categorizer_note || "—"}`, name, money(tx.amount), date]);
       }
     }
 
-    const csv = lines.join("\n");
+    const ws2 = XLSX.utils.aoa_to_sheet(detailRows);
+    ws2["!cols"] = [{ wch: 35 }, { wch: 30 }, { wch: 15 }, { wch: 12 }];
+    XLSX.utils.book_append_sheet(wb, ws2, "Détail");
 
-    return new Response(csv, {
+    // Generate buffer
+    const buf = XLSX.write(wb, { type: "buffer", bookType: "xlsx" });
+
+    return new Response(buf, {
       status: 200,
       headers: {
-        "Content-Type": "text/csv; charset=utf-8",
-        "Content-Disposition": `attachment; filename="finance_${monthParam}.csv"`,
+        "Content-Type": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        "Content-Disposition": `attachment; filename="finance_${monthParam}.xlsx"`,
       },
     });
   } catch (err: unknown) {
