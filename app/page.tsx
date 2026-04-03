@@ -183,12 +183,12 @@ export default function Dashboard() {
         </div>
 
         <nav className="flex flex-col items-center gap-6 flex-1">
-          <button className="p-2 rounded-lg hover:bg-[#1A1A1E] transition-colors duration-150" title="Dashboard">
+          <button className="p-2 rounded-lg bg-[#1A1A1E] transition-colors duration-150" title="Dashboard">
             <IconHome active />
           </button>
-          <button className="p-2 rounded-lg hover:bg-[#1A1A1E] transition-colors duration-150" title="Transactions">
-            <IconTransactions />
-          </button>
+          <a href="/invoices" className="p-2 rounded-lg hover:bg-[#1A1A1E] transition-colors duration-150" title="Factures">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#6B7280" strokeWidth="1.5" strokeLinecap="round"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z" /><polyline points="14 2 14 8 20 8" /><line x1="16" y1="13" x2="8" y2="13" /><line x1="16" y1="17" x2="8" y2="17" /></svg>
+          </a>
           <button className="p-2 rounded-lg hover:bg-[#1A1A1E] transition-colors duration-150" title="Export">
             <IconExport />
           </button>
