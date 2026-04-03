@@ -27,7 +27,7 @@ interface LogEntry {
   type: "info" | "success" | "error";
 }
 
-function now() {
+function ts() {
   return new Date().toLocaleTimeString("en-GB", { hour12: false });
 }
 
@@ -43,50 +43,39 @@ export default function Dashboard() {
   const [logs, setLogs] = useState<LogEntry[]>([]);
   const [loading, setLoading] = useState(false);
   const [exporting, setExporting] = useState(false);
-  const [stats, setStats] = useState({
-    count: 0,
-    credit: 0,
-    debit: 0,
-    net: 0,
-  });
+  const [stats, setStats] = useState({ count: 0, credit: 0, debit: 0, net: 0 });
 
-  const addLog = useCallback(
-    (message: string, type: LogEntry["type"] = "info") => {
-      setLogs((prev) => [...prev.slice(-19), { time: now(), message, type }]);
-    },
-    []
-  );
+  const log = useCallback((message: string, type: LogEntry["type"] = "info") => {
+    setLogs((prev) => [...prev.slice(-29), { time: ts(), message, type }]);
+  }, []);
 
   useEffect(() => {
-    async function fetchOrg() {
+    async function init() {
+      log("connecting...");
       try {
-        addLog("SYS > Connecting to Qonto API...");
         const res = await fetch("/api/organization");
         const data = await res.json();
         if (data.accounts) {
           setAccounts(data.accounts);
-          addLog(
-            `SYS > Connected. ${data.accounts.length} account(s) found.`,
-            "success"
-          );
+          log(`connected — ${data.accounts.length} account(s)`, "success");
         } else {
-          addLog(`ERR > ${data.error || "Failed to connect"}`, "error");
+          log(data.error || "connection failed", "error");
         }
       } catch {
-        addLog("ERR > Connection failed", "error");
+        log("connection failed", "error");
       }
     }
-    fetchOrg();
-  }, [addLog]);
+    init();
+  }, [log]);
 
-  async function fetchTransactions() {
+  async function pull() {
     setLoading(true);
-    addLog(`CMD > GET /transactions?month=${month}`);
+    log(`pull ${month}`);
     try {
       const res = await fetch(`/api/transactions?month=${month}`);
       const data = await res.json();
       if (data.error) {
-        addLog(`ERR > ${data.error}`, "error");
+        log(data.error, "error");
       } else {
         setTransactions(data.transactions);
         setStats({
@@ -95,20 +84,17 @@ export default function Dashboard() {
           debit: data.total_debit,
           net: data.net,
         });
-        addLog(
-          `RES > ${data.count} transactions loaded. Net: ${data.net >= 0 ? "+" : ""}${data.net.toFixed(2)} EUR`,
-          "success"
-        );
+        log(`${data.count} transactions — net ${data.net >= 0 ? "+" : ""}${data.net.toFixed(2)}`, "success");
       }
     } catch {
-      addLog("ERR > Failed to fetch transactions", "error");
+      log("fetch failed", "error");
     }
     setLoading(false);
   }
 
-  async function handleExport() {
+  async function exportCSV() {
     setExporting(true);
-    addLog(`CMD > POST /export { month: "${month}" }`);
+    log(`export ${month}`);
     try {
       const res = await fetch("/api/export", {
         method: "POST",
@@ -117,7 +103,7 @@ export default function Dashboard() {
       });
       if (!res.ok) {
         const err = await res.json();
-        addLog(`ERR > ${err.error}`, "error");
+        log(err.error, "error");
       } else {
         const blob = await res.blob();
         const url = window.URL.createObjectURL(blob);
@@ -126,217 +112,129 @@ export default function Dashboard() {
         a.download = `finance_${month}.csv`;
         a.click();
         window.URL.revokeObjectURL(url);
-        addLog(`RES > CSV exported: finance_${month}.csv`, "success");
+        log(`saved finance_${month}.csv`, "success");
       }
     } catch {
-      addLog("ERR > Export failed", "error");
+      log("export failed", "error");
     }
     setExporting(false);
   }
 
+  const connected = accounts.length > 0;
+
   return (
-    <div className="min-h-screen bg-[#000] text-[#e0e0e0] font-mono">
-      {/* Header */}
-      <header className="border-b border-[#1a1a1a] px-6 py-4 animate-fade-up">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-4">
-            <h1 className="text-sm font-bold tracking-[0.3em] text-white uppercase">
+    <div className="min-h-screen bg-black text-white font-mono">
+      {/* ── Top bar ── */}
+      <div className="border-b border-[#1a1a1a] fade-in">
+        <div className="max-w-[1400px] mx-auto px-8 py-6 flex items-end justify-between">
+          <div>
+            <h1 className="text-[11px] font-light tracking-[0.5em] uppercase text-[#666]">
               Finance Mate
             </h1>
-            <span className="text-[10px] text-[#444] tracking-widest">
-              TERMINAL v1.0
-            </span>
+            <div className="text-[40px] font-light tracking-tight leading-none mt-1 tabular-nums">
+              {connected
+                ? `${accounts[0].balance.toLocaleString("fr-FR", { minimumFractionDigits: 2 })} EUR`
+                : "—"}
+            </div>
           </div>
-          <div className="flex items-center gap-6 text-[11px] text-[#555]">
-            <span>
-              {accounts.length > 0 ? (
-                <span className="text-[#00ff88]">● CONNECTED</span>
-              ) : (
-                <span className="text-[#ff3333]">● OFFLINE</span>
-              )}
-            </span>
-            <span className="tabular-nums">{now()}</span>
+          <div className="text-right text-[10px] tracking-[0.15em] uppercase text-[#444] space-y-1">
+            <div>{connected ? accounts[0].iban : ""}</div>
+            <div>{connected ? "CONNECTED" : "OFFLINE"}</div>
           </div>
         </div>
-      </header>
+      </div>
 
-      <div className="flex flex-1">
-        {/* Left Panel */}
-        <aside className="w-80 border-r border-[#1a1a1a] flex flex-col">
-          {/* Account Info */}
-          <div className="p-6 border-b border-[#1a1a1a] animate-fade-up delay-1">
-            <div className="text-[10px] tracking-[0.2em] text-[#555] mb-3 uppercase">
-              Account
-            </div>
-            {accounts.length > 0 ? (
-              <div className="space-y-2">
-                <div className="text-xl font-light text-white tabular-nums">
-                  {accounts[0].balance.toLocaleString("fr-FR", {
-                    minimumFractionDigits: 2,
-                  })}{" "}
-                  <span className="text-[11px] text-[#555]">
-                    {accounts[0].currency}
-                  </span>
-                </div>
-                <div className="text-[11px] text-[#444] font-light tracking-wide">
-                  {accounts[0].iban}
-                </div>
-              </div>
-            ) : (
-              <div className="text-[11px] text-[#444]">Loading...</div>
-            )}
-          </div>
+      {/* ── Controls ── */}
+      <div className="border-b border-[#1a1a1a] fade-in d1">
+        <div className="max-w-[1400px] mx-auto px-8 py-5 flex items-center gap-6">
+          <input
+            type="month"
+            value={month}
+            onChange={(e) => setMonth(e.target.value)}
+            className="bg-transparent border border-[#222] text-white text-[13px] px-4 py-2.5 font-mono tracking-wide focus:outline-none focus:border-[#555] transition-colors [color-scheme:dark] w-52"
+          />
+          <button
+            onClick={pull}
+            disabled={loading}
+            className="bg-white text-black text-[11px] font-medium tracking-[0.2em] uppercase px-8 py-2.5 hover:bg-[#ccc] disabled:opacity-20 transition-all cursor-pointer"
+          >
+            {loading ? "..." : "PULL"}
+          </button>
+          <button
+            onClick={exportCSV}
+            disabled={exporting || transactions.length === 0}
+            className="border border-[#333] text-[#666] text-[11px] font-medium tracking-[0.2em] uppercase px-8 py-2.5 hover:border-white hover:text-white disabled:opacity-20 transition-all cursor-pointer"
+          >
+            {exporting ? "..." : "EXPORT CSV"}
+          </button>
 
-          {/* Month Selector */}
-          <div className="p-6 border-b border-[#1a1a1a] animate-fade-up delay-2">
-            <div className="text-[10px] tracking-[0.2em] text-[#555] mb-3 uppercase">
-              Period
-            </div>
-            <input
-              type="month"
-              value={month}
-              onChange={(e) => setMonth(e.target.value)}
-              className="w-full bg-[#0a0a0a] border border-[#222] text-white text-sm px-3 py-2 font-mono focus:outline-none focus:border-[#444] transition-colors [color-scheme:dark]"
-            />
-            <div className="mt-3 flex gap-2">
-              <button
-                onClick={fetchTransactions}
-                disabled={loading}
-                className="flex-1 bg-white text-black text-[11px] font-semibold tracking-[0.15em] uppercase py-2.5 px-4 hover:bg-[#ddd] disabled:opacity-30 transition-all cursor-pointer"
-              >
-                {loading ? "LOADING..." : "PULL"}
-              </button>
-              <button
-                onClick={handleExport}
-                disabled={exporting || transactions.length === 0}
-                className="flex-1 border border-[#333] text-[#888] text-[11px] font-semibold tracking-[0.15em] uppercase py-2.5 px-4 hover:border-white hover:text-white disabled:opacity-20 transition-all cursor-pointer"
-              >
-                {exporting ? "..." : "EXPORT CSV"}
-              </button>
-            </div>
-          </div>
-
-          {/* Stats */}
           {stats.count > 0 && (
-            <div className="p-6 border-b border-[#1a1a1a] animate-fade-up">
-              <div className="text-[10px] tracking-[0.2em] text-[#555] mb-3 uppercase">
-                Summary — {month}
+            <div className="ml-auto flex gap-10 text-[12px] tabular-nums">
+              <div>
+                <span className="text-[#444] mr-3">IN</span>
+                <span className="text-white">+{stats.credit.toFixed(2)}</span>
               </div>
-              <div className="space-y-2 text-[12px] tabular-nums">
-                <div className="flex justify-between">
-                  <span className="text-[#555]">Transactions</span>
-                  <span className="text-white">{stats.count}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-[#555]">Credits</span>
-                  <span className="text-[#00ff88]">
-                    +{stats.credit.toFixed(2)}
-                  </span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-[#555]">Debits</span>
-                  <span className="text-[#ff3333]">
-                    -{stats.debit.toFixed(2)}
-                  </span>
-                </div>
-                <div className="flex justify-between pt-2 border-t border-[#1a1a1a]">
-                  <span className="text-[#555]">Net</span>
-                  <span
-                    className={`font-medium ${stats.net >= 0 ? "text-[#00ff88]" : "text-[#ff3333]"}`}
-                  >
-                    {stats.net >= 0 ? "+" : ""}
-                    {stats.net.toFixed(2)}
-                  </span>
-                </div>
+              <div>
+                <span className="text-[#444] mr-3">OUT</span>
+                <span className="text-[#888]">-{stats.debit.toFixed(2)}</span>
+              </div>
+              <div>
+                <span className="text-[#444] mr-3">NET</span>
+                <span className="text-white font-medium">
+                  {stats.net >= 0 ? "+" : ""}{stats.net.toFixed(2)}
+                </span>
               </div>
             </div>
           )}
+        </div>
+      </div>
 
-          {/* Log */}
-          <div className="flex-1 p-6 animate-fade-up delay-3">
-            <div className="text-[10px] tracking-[0.2em] text-[#555] mb-3 uppercase">
-              System Log
-            </div>
-            <div className="space-y-1 text-[10px] leading-relaxed max-h-60 overflow-y-auto">
-              {logs.map((log, i) => (
-                <div
-                  key={i}
-                  className={`font-light ${
-                    log.type === "error"
-                      ? "text-[#ff3333]"
-                      : log.type === "success"
-                        ? "text-[#00ff88]"
-                        : "text-[#555]"
-                  }`}
-                >
-                  <span className="text-[#333] mr-2">{log.time}</span>
-                  {log.message}
-                </div>
-              ))}
-              {logs.length === 0 && (
-                <div className="text-[#333]">Waiting for input...</div>
-              )}
-              <div className="cursor-blink text-[#333] mt-1 text-[9px]">
-                ready
-              </div>
-            </div>
-          </div>
-        </aside>
-
-        {/* Main — Transactions Table */}
-        <main className="flex-1 flex flex-col animate-fade-up delay-4">
-          <div className="px-6 py-4 border-b border-[#1a1a1a]">
-            <div className="text-[10px] tracking-[0.2em] text-[#555] uppercase">
-              Transactions — {month}
-            </div>
-          </div>
-
+      <div className="max-w-[1400px] mx-auto flex">
+        {/* ── Table ── */}
+        <main className="flex-1 fade-in d2">
           {transactions.length === 0 ? (
-            <div className="flex-1 flex items-center justify-center">
-              <div className="text-center">
-                <div className="text-[#222] text-6xl font-thin mb-4">—</div>
-                <div className="text-[11px] text-[#333] tracking-wide">
-                  Select a period and press PULL
-                </div>
+            <div className="px-8 py-32 text-center">
+              <div className="text-[#1a1a1a] text-[120px] font-thin leading-none select-none">
+                /
+              </div>
+              <div className="text-[11px] text-[#333] tracking-[0.3em] uppercase mt-6">
+                No data — select period and pull
               </div>
             </div>
           ) : (
-            <div className="flex-1 overflow-auto">
-              <div className="grid grid-cols-[100px_70px_110px_1fr_1fr_100px] gap-4 px-6 py-3 text-[10px] tracking-[0.15em] text-[#444] uppercase border-b border-[#111] sticky top-0 bg-[#000]">
+            <div>
+              {/* Table head */}
+              <div className="grid grid-cols-[100px_60px_120px_1fr_1fr_90px] gap-3 px-8 py-3 text-[9px] tracking-[0.25em] uppercase text-[#444] border-b border-[#111]">
                 <span>Date</span>
-                <span>Side</span>
+                <span>Dir</span>
                 <span className="text-right">Amount</span>
                 <span>Counterparty</span>
                 <span>Label</span>
                 <span>Type</span>
               </div>
 
+              {/* Rows */}
               {transactions.map((tx, i) => (
                 <div
                   key={i}
-                  className="grid grid-cols-[100px_70px_110px_1fr_1fr_100px] gap-4 px-6 py-2.5 text-[12px] border-b border-[#0d0d0d] hover:bg-[#080808] transition-colors group"
+                  className="grid grid-cols-[100px_60px_120px_1fr_1fr_90px] gap-3 px-8 py-3 text-[12px] border-b border-[#0a0a0a] hover:bg-[#060606] transition-colors group"
                 >
                   <span className="text-[#555] tabular-nums">
                     {tx.date?.slice(0, 10)}
                   </span>
-                  <span
-                    className={`text-[10px] uppercase tracking-wider font-medium ${tx.side === "credit" ? "text-[#00ff88]" : "text-[#ff3333]"}`}
-                  >
+                  <span className={`text-[10px] uppercase tracking-[0.2em] ${tx.side === "credit" ? "text-white" : "text-[#444]"}`}>
                     {tx.side === "credit" ? "IN" : "OUT"}
                   </span>
-                  <span
-                    className={`text-right tabular-nums font-medium ${tx.side === "credit" ? "text-[#e0e0e0]" : "text-[#888]"}`}
-                  >
-                    {tx.side === "credit" ? "+" : "-"}
-                    {tx.amount.toFixed(2)}
+                  <span className={`text-right tabular-nums ${tx.side === "credit" ? "text-white" : "text-[#666]"}`}>
+                    {tx.side === "credit" ? "+" : "-"}{tx.amount.toFixed(2)}
                   </span>
-                  <span className="text-[#999] truncate group-hover:text-white transition-colors">
+                  <span className="text-[#777] truncate group-hover:text-white transition-colors">
                     {tx.counterparty_name || "—"}
                   </span>
-                  <span className="text-[#555] truncate">
+                  <span className="text-[#444] truncate">
                     {tx.label || "—"}
                   </span>
-                  <span className="text-[10px] text-[#333] uppercase tracking-wider">
+                  <span className="text-[9px] text-[#333] uppercase tracking-[0.15em]">
                     {tx.operation_type}
                   </span>
                 </div>
@@ -344,6 +242,32 @@ export default function Dashboard() {
             </div>
           )}
         </main>
+
+        {/* ── Log ── */}
+        <aside className="w-72 border-l border-[#0d0d0d] fade-in d3">
+          <div className="px-6 py-3 text-[9px] tracking-[0.25em] uppercase text-[#333] border-b border-[#0d0d0d]">
+            Log
+          </div>
+          <div className="px-6 py-4 space-y-1.5 text-[10px] leading-relaxed max-h-[calc(100vh-220px)] overflow-y-auto">
+            {logs.map((entry, i) => (
+              <div key={i} className="flex gap-2">
+                <span className="text-[#222] shrink-0">{entry.time}</span>
+                <span className={
+                  entry.type === "error"
+                    ? "text-[#666]"
+                    : entry.type === "success"
+                      ? "text-[#999]"
+                      : "text-[#444]"
+                }>
+                  {entry.message}
+                </span>
+              </div>
+            ))}
+            {logs.length === 0 && (
+              <div className="text-[#222]">waiting</div>
+            )}
+          </div>
+        </aside>
       </div>
     </div>
   );
