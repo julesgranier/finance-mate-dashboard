@@ -61,9 +61,17 @@ export default function InvoicesPage() {
     address: "", city: "", postal_code: "", country: "España", payment_terms: 30,
   });
 
+  async function refreshInvoices() {
+    // Check payments against Qonto automatically
+    await fetch("/api/invoices/check-payments", { method: "POST" });
+    const res = await fetch("/api/invoices");
+    const data = await res.json();
+    setInvoices(data.invoices || []);
+  }
+
   useEffect(() => {
     fetch("/api/clients").then(r => r.json()).then(d => setClients(d.clients || []));
-    fetch("/api/invoices").then(r => r.json()).then(d => setInvoices(d.invoices || []));
+    refreshInvoices();
   }, []);
 
   async function handleCreateInvoice() {
@@ -83,13 +91,12 @@ export default function InvoicesPage() {
     });
 
     if (res.ok) {
-      const data = await res.json();
-      setInvoices(prev => [data.invoice, ...prev]);
       setItems([{ concept: "", quantity: 1, unit_price: 0 }]);
       setNotes("");
       setRecurring("");
       setIrpfRate(0);
       setView("list");
+      await refreshInvoices();
     }
     setCreating(false);
   }
@@ -122,22 +129,6 @@ export default function InvoicesPage() {
       a.download = `${invoice.number}.pdf`;
       a.click();
       window.URL.revokeObjectURL(url);
-    }
-  }
-
-  async function checkPayments() {
-    const res = await fetch("/api/invoices/check-payments", { method: "POST" });
-    if (res.ok) {
-      const data = await res.json();
-      // Refresh invoice list
-      const listRes = await fetch("/api/invoices");
-      const listData = await listRes.json();
-      setInvoices(listData.invoices || []);
-      if (data.matched > 0) {
-        alert(`${data.matched} facture(s) marquée(s) comme payée(s)`);
-      } else {
-        alert("Aucun nouveau paiement détecté");
-      }
     }
   }
 
@@ -191,12 +182,6 @@ export default function InvoicesPage() {
                 className={`text-[14px] px-4 py-2 rounded-[20px] transition-colors duration-150 cursor-pointer ${view === "list" ? "bg-white text-black" : "border border-[#333] text-white hover:bg-[#1E1E22]"}`}
               >
                 Historique
-              </button>
-              <button
-                onClick={checkPayments}
-                className="text-[14px] px-4 py-2 rounded-[20px] border border-[#333] text-[#4ADE80] hover:bg-[#1E1E22] transition-colors duration-150 cursor-pointer"
-              >
-                Vérifier paiements Qonto
               </button>
             </div>
           </div>
