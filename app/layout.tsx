@@ -20,7 +20,7 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en" className={`${jetbrains.variable} h-full`}>
-      <body className="min-h-full font-mono">{children}</body>
+      <body className="min-h-full font-mono bg-white">{children}</body>
     </html>
   );
 }

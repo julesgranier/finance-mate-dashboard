@@ -1,8 +1,6 @@
 @import "tailwindcss";
 
 @theme inline {
-  --color-background: #000000;
-  --color-foreground: #ffffff;
   --font-mono: "JetBrains Mono", ui-monospace, monospace;
 }
 
@@ -11,25 +9,25 @@
 }
 
 body {
-  background: #000;
-  color: #fff;
+  background: #fff;
+  color: #111;
   font-family: var(--font-mono);
   -webkit-font-smoothing: antialiased;
 }
 
 ::selection {
-  background: #fff;
-  color: #000;
+  background: #111;
+  color: #fff;
 }
 
 ::-webkit-scrollbar {
   width: 2px;
 }
 ::-webkit-scrollbar-track {
-  background: #000;
+  background: #fff;
 }
 ::-webkit-scrollbar-thumb {
-  background: #333;
+  background: #ccc;
 }
 
 @keyframes fadeIn {
@@ -38,12 +36,11 @@ body {
 }
 
 .fade-in {
-  animation: fadeIn 0.6s ease forwards;
+  animation: fadeIn 0.5s ease forwards;
   opacity: 0;
 }
 
-.d1 { animation-delay: 0.1s; }
-.d2 { animation-delay: 0.2s; }
-.d3 { animation-delay: 0.3s; }
-.d4 { animation-delay: 0.4s; }
-.d5 { animation-delay: 0.5s; }
+.d1 { animation-delay: 0.08s; }
+.d2 { animation-delay: 0.16s; }
+.d3 { animation-delay: 0.24s; }
+.d4 { animation-delay: 0.32s; }

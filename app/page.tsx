@@ -123,47 +123,49 @@ export default function Dashboard() {
   const connected = accounts.length > 0;
 
   return (
-    <div className="min-h-screen bg-black text-white font-mono">
-      {/* ── Top bar ── */}
-      <div className="border-b border-[#1a1a1a] fade-in">
-        <div className="max-w-[1400px] mx-auto px-8 py-6 flex items-end justify-between">
+    <div className="min-h-screen bg-white text-[#111] font-mono">
+      {/* ── Header ── */}
+      <div className="border-b border-[#e5e5e5] fade-in">
+        <div className="max-w-[1400px] mx-auto px-8 py-8 flex items-end justify-between">
           <div>
-            <h1 className="text-[11px] font-light tracking-[0.5em] uppercase text-[#666]">
+            <h1 className="text-[10px] font-medium tracking-[0.5em] uppercase text-[#999]">
               Finance Mate
             </h1>
-            <div className="text-[40px] font-light tracking-tight leading-none mt-1 tabular-nums">
+            <div className="text-[44px] font-light tracking-tight leading-none mt-2 tabular-nums text-[#111]">
               {connected
                 ? `${accounts[0].balance.toLocaleString("fr-FR", { minimumFractionDigits: 2 })} EUR`
                 : "—"}
             </div>
           </div>
-          <div className="text-right text-[10px] tracking-[0.15em] uppercase text-[#444] space-y-1">
+          <div className="text-right text-[10px] tracking-[0.12em] uppercase text-[#bbb] space-y-1">
             <div>{connected ? accounts[0].iban : ""}</div>
-            <div>{connected ? "CONNECTED" : "OFFLINE"}</div>
+            <div className={connected ? "text-[#111]" : "text-[#ccc]"}>
+              {connected ? "Connected" : "Offline"}
+            </div>
           </div>
         </div>
       </div>
 
       {/* ── Controls ── */}
-      <div className="border-b border-[#1a1a1a] fade-in d1">
-        <div className="max-w-[1400px] mx-auto px-8 py-5 flex items-center gap-6">
+      <div className="border-b border-[#e5e5e5] fade-in d1">
+        <div className="max-w-[1400px] mx-auto px-8 py-5 flex items-center gap-5">
           <input
             type="month"
             value={month}
             onChange={(e) => setMonth(e.target.value)}
-            className="bg-transparent border border-[#222] text-white text-[13px] px-4 py-2.5 font-mono tracking-wide focus:outline-none focus:border-[#555] transition-colors [color-scheme:dark] w-52"
+            className="bg-white border border-[#ddd] text-[#111] text-[13px] px-4 py-2.5 font-mono tracking-wide focus:outline-none focus:border-[#999] transition-colors w-52"
           />
           <button
             onClick={pull}
             disabled={loading}
-            className="bg-white text-black text-[11px] font-medium tracking-[0.2em] uppercase px-8 py-2.5 hover:bg-[#ccc] disabled:opacity-20 transition-all cursor-pointer"
+            className="bg-[#111] text-white text-[11px] font-medium tracking-[0.2em] uppercase px-8 py-2.5 hover:bg-[#333] disabled:opacity-20 transition-all cursor-pointer"
           >
             {loading ? "..." : "PULL"}
           </button>
           <button
             onClick={exportCSV}
             disabled={exporting || transactions.length === 0}
-            className="border border-[#333] text-[#666] text-[11px] font-medium tracking-[0.2em] uppercase px-8 py-2.5 hover:border-white hover:text-white disabled:opacity-20 transition-all cursor-pointer"
+            className="border border-[#ccc] text-[#888] text-[11px] font-medium tracking-[0.2em] uppercase px-8 py-2.5 hover:border-[#111] hover:text-[#111] disabled:opacity-20 transition-all cursor-pointer"
           >
             {exporting ? "..." : "EXPORT CSV"}
           </button>
@@ -171,16 +173,16 @@ export default function Dashboard() {
           {stats.count > 0 && (
             <div className="ml-auto flex gap-10 text-[12px] tabular-nums">
               <div>
-                <span className="text-[#444] mr-3">IN</span>
-                <span className="text-white">+{stats.credit.toFixed(2)}</span>
+                <span className="text-[#bbb] mr-3">IN</span>
+                <span className="text-[#111]">+{stats.credit.toFixed(2)}</span>
               </div>
               <div>
-                <span className="text-[#444] mr-3">OUT</span>
-                <span className="text-[#888]">-{stats.debit.toFixed(2)}</span>
+                <span className="text-[#bbb] mr-3">OUT</span>
+                <span className="text-[#666]">-{stats.debit.toFixed(2)}</span>
               </div>
               <div>
-                <span className="text-[#444] mr-3">NET</span>
-                <span className="text-white font-medium">
+                <span className="text-[#bbb] mr-3">NET</span>
+                <span className="text-[#111] font-medium">
                   {stats.net >= 0 ? "+" : ""}{stats.net.toFixed(2)}
                 </span>
               </div>
@@ -189,22 +191,19 @@ export default function Dashboard() {
         </div>
       </div>
 
-      <div className="max-w-[1400px] mx-auto flex">
+      <div className="max-w-[1400px] mx-auto flex min-h-[calc(100vh-200px)]">
         {/* ── Table ── */}
         <main className="flex-1 fade-in d2">
           {transactions.length === 0 ? (
             <div className="px-8 py-32 text-center">
-              <div className="text-[#1a1a1a] text-[120px] font-thin leading-none select-none">
-                /
-              </div>
-              <div className="text-[11px] text-[#333] tracking-[0.3em] uppercase mt-6">
-                No data — select period and pull
+              <div className="text-[#f0f0f0] text-[120px] font-thin leading-none select-none">/</div>
+              <div className="text-[11px] text-[#ccc] tracking-[0.3em] uppercase mt-6">
+                Select period and pull
               </div>
             </div>
           ) : (
             <div>
-              {/* Table head */}
-              <div className="grid grid-cols-[100px_60px_120px_1fr_1fr_90px] gap-3 px-8 py-3 text-[9px] tracking-[0.25em] uppercase text-[#444] border-b border-[#111]">
+              <div className="grid grid-cols-[100px_60px_120px_1fr_1fr_90px] gap-3 px-8 py-3 text-[9px] tracking-[0.25em] uppercase text-[#bbb] border-b border-[#eee]">
                 <span>Date</span>
                 <span>Dir</span>
                 <span className="text-right">Amount</span>
@@ -213,28 +212,27 @@ export default function Dashboard() {
                 <span>Type</span>
               </div>
 
-              {/* Rows */}
               {transactions.map((tx, i) => (
                 <div
                   key={i}
-                  className="grid grid-cols-[100px_60px_120px_1fr_1fr_90px] gap-3 px-8 py-3 text-[12px] border-b border-[#0a0a0a] hover:bg-[#060606] transition-colors group"
+                  className="grid grid-cols-[100px_60px_120px_1fr_1fr_90px] gap-3 px-8 py-3 text-[12px] border-b border-[#f5f5f5] hover:bg-[#fafafa] transition-colors group"
                 >
-                  <span className="text-[#555] tabular-nums">
+                  <span className="text-[#999] tabular-nums">
                     {tx.date?.slice(0, 10)}
                   </span>
-                  <span className={`text-[10px] uppercase tracking-[0.2em] ${tx.side === "credit" ? "text-white" : "text-[#444]"}`}>
+                  <span className={`text-[10px] uppercase tracking-[0.2em] ${tx.side === "credit" ? "text-[#111]" : "text-[#bbb]"}`}>
                     {tx.side === "credit" ? "IN" : "OUT"}
                   </span>
-                  <span className={`text-right tabular-nums ${tx.side === "credit" ? "text-white" : "text-[#666]"}`}>
+                  <span className={`text-right tabular-nums ${tx.side === "credit" ? "text-[#111] font-medium" : "text-[#666]"}`}>
                     {tx.side === "credit" ? "+" : "-"}{tx.amount.toFixed(2)}
                   </span>
-                  <span className="text-[#777] truncate group-hover:text-white transition-colors">
+                  <span className="text-[#555] truncate group-hover:text-[#111] transition-colors">
                     {tx.counterparty_name || "—"}
                   </span>
-                  <span className="text-[#444] truncate">
+                  <span className="text-[#bbb] truncate">
                     {tx.label || "—"}
                   </span>
-                  <span className="text-[9px] text-[#333] uppercase tracking-[0.15em]">
+                  <span className="text-[9px] text-[#ddd] uppercase tracking-[0.15em]">
                     {tx.operation_type}
                   </span>
                 </div>
@@ -244,27 +242,27 @@ export default function Dashboard() {
         </main>
 
         {/* ── Log ── */}
-        <aside className="w-72 border-l border-[#0d0d0d] fade-in d3">
-          <div className="px-6 py-3 text-[9px] tracking-[0.25em] uppercase text-[#333] border-b border-[#0d0d0d]">
+        <aside className="w-72 border-l border-[#f0f0f0] fade-in d3">
+          <div className="px-6 py-3 text-[9px] tracking-[0.25em] uppercase text-[#ccc] border-b border-[#f0f0f0]">
             Log
           </div>
           <div className="px-6 py-4 space-y-1.5 text-[10px] leading-relaxed max-h-[calc(100vh-220px)] overflow-y-auto">
             {logs.map((entry, i) => (
               <div key={i} className="flex gap-2">
-                <span className="text-[#222] shrink-0">{entry.time}</span>
+                <span className="text-[#ddd] shrink-0">{entry.time}</span>
                 <span className={
                   entry.type === "error"
-                    ? "text-[#666]"
+                    ? "text-[#999]"
                     : entry.type === "success"
-                      ? "text-[#999]"
-                      : "text-[#444]"
+                      ? "text-[#555]"
+                      : "text-[#bbb]"
                 }>
                   {entry.message}
                 </span>
               </div>
             ))}
             {logs.length === 0 && (
-              <div className="text-[#222]">waiting</div>
+              <div className="text-[#ddd]">waiting</div>
             )}
           </div>
         </aside>
