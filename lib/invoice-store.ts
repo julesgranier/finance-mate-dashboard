@@ -1,6 +1,4 @@
-// In-memory store for invoices and clients (Vercel serverless)
-// Data persists within the same serverless instance but resets on cold start.
-// For production, swap with a database.
+import { supabase } from "./supabase";
 
 export interface Client {
   id: string;
@@ -27,7 +25,8 @@ export interface Invoice {
   number: string;
   date: string;
   due_date: string;
-  client: Client;
+  client_id: string;
+  client?: Client;
   items: InvoiceItem[];
   base: number;
   iva_rate: number;
@@ -41,7 +40,6 @@ export interface Invoice {
   created_at: string;
 }
 
-// Company info
 export const COMPANY = {
   name: "YOUR MATES TECH SL",
   cif: "B56745144",
@@ -53,58 +51,85 @@ export const COMPANY = {
 
 export const IVA_RATE = 0.21;
 
-// In-memory stores
-let clients: Client[] = [
-  {
-    id: "client_001",
-    name: "Acme Corp",
-    legal_name: "ACME CORPORATION SL",
-    nif: "B12345678",
-    email: "billing@acme.com",
-    address: "Calle Gran Via 1",
-    city: "Barcelona",
-    postal_code: "08001",
-    country: "España",
-    contact_person: "",
-    payment_terms: 30,
-  },
-];
+// ── Clients ──
 
-let invoices: Invoice[] = [];
-let nextNumber = 1;
-
-export function getClients(): Client[] {
-  return clients;
+export async function getClients(): Promise<Client[]> {
+  const { data, error } = await supabase
+    .from("clients")
+    .select("*")
+    .order("created_at", { ascending: true });
+  if (error) throw new Error(error.message);
+  return data || [];
 }
 
-export function getClient(id: string): Client | undefined {
-  return clients.find((c) => c.id === id);
+export async function getClient(id: string): Promise<Client | null> {
+  const { data, error } = await supabase
+    .from("clients")
+    .select("*")
+    .eq("id", id)
+    .single();
+  if (error) return null;
+  return data;
 }
 
-export function addClient(data: Omit<Client, "id">): Client {
-  const id = `client_${String(clients.length + 1).padStart(3, "0")}`;
-  const client = { ...data, id };
-  clients.push(client);
+export async function addClient(data: Omit<Client, "id">): Promise<Client> {
+  const { data: client, error } = await supabase
+    .from("clients")
+    .insert(data)
+    .select()
+    .single();
+  if (error) throw new Error(error.message);
   return client;
 }
 
-export function getInvoices(): Invoice[] {
-  return invoices;
+// ── Invoices ──
+
+export async function getInvoices(): Promise<Invoice[]> {
+  const { data, error } = await supabase
+    .from("invoices")
+    .select("*")
+    .order("created_at", { ascending: false });
+  if (error) throw new Error(error.message);
+
+  // Attach client info
+  const clients = await getClients();
+  const clientMap = Object.fromEntries(clients.map((c) => [c.id, c]));
+
+  return (data || []).map((inv) => ({
+    ...inv,
+    client: clientMap[inv.client_id] || null,
+  }));
 }
 
-export function createInvoice(data: {
+export async function updateInvoiceStatus(id: string, status: string): Promise<void> {
+  await supabase.from("invoices").update({ status }).eq("id", id);
+}
+
+export async function createInvoice(data: {
   client_id: string;
   items: InvoiceItem[];
   notes?: string;
   recurring?: "monthly" | "quarterly" | "yearly" | null;
   irpf_rate?: number;
-}): Invoice | null {
-  const client = getClient(data.client_id);
+}): Promise<Invoice | null> {
+  const client = await getClient(data.client_id);
   if (!client) return null;
 
+  // Get and increment counter
+  const { data: counter } = await supabase
+    .from("invoice_counter")
+    .select("next_number")
+    .eq("id", 1)
+    .single();
+
+  const num = counter?.next_number || 1;
   const year = new Date().getFullYear();
-  const number = `MATE-${year}-${String(nextNumber).padStart(3, "0")}`;
-  nextNumber++;
+  const number = `MATE-${year}-${String(num).padStart(3, "0")}`;
+
+  await supabase
+    .from("invoice_counter")
+    .update({ next_number: num + 1 })
+    .eq("id", 1);
 
   const now = new Date();
   const dueDate = new Date(now);
@@ -116,12 +141,11 @@ export function createInvoice(data: {
   const irpf_amount = Math.round(base * irpf_rate * 100) / 100;
   const total = Math.round((base + iva_amount - irpf_amount) * 100) / 100;
 
-  const invoice: Invoice = {
-    id: `inv_${Date.now()}`,
+  const invoiceData = {
     number,
     date: now.toISOString().slice(0, 10),
     due_date: dueDate.toISOString().slice(0, 10),
-    client,
+    client_id: data.client_id,
     items: data.items,
     base,
     iva_rate: IVA_RATE,
@@ -129,12 +153,18 @@ export function createInvoice(data: {
     irpf_rate,
     irpf_amount,
     total,
-    status: "emitted",
+    status: "emitted" as const,
     notes: data.notes || "",
     recurring: data.recurring || null,
-    created_at: now.toISOString(),
   };
 
-  invoices.push(invoice);
-  return invoice;
+  const { data: invoice, error } = await supabase
+    .from("invoices")
+    .insert(invoiceData)
+    .select()
+    .single();
+
+  if (error) throw new Error(error.message);
+
+  return { ...invoice, client };
 }

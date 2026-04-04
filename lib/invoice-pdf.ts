@@ -2,6 +2,8 @@ import { jsPDF } from "jspdf";
 import { type Invoice, COMPANY } from "./invoice-store";
 
 export function generateInvoicePDF(invoice: Invoice): Buffer {
+  if (!invoice.client) throw new Error("Invoice has no client data");
+  const client = invoice.client;
   const doc = new jsPDF({ unit: "mm", format: "a4" });
   const w = doc.internal.pageSize.getWidth();
   let y = 20;
@@ -49,16 +51,16 @@ export function generateInvoicePDF(invoice: Invoice): Buffer {
   doc.setFontSize(10);
   doc.setFont("helvetica", "bold");
   doc.setTextColor(20, 20, 20);
-  doc.text(invoice.client.legal_name || invoice.client.name, 15, y); y += 5;
+  doc.text(client.legal_name || client.name, 15, y); y += 5;
 
   doc.setFontSize(9);
   doc.setFont("helvetica", "normal");
   doc.setTextColor(80, 80, 80);
-  doc.text(`NIF/CIF: ${invoice.client.nif}`, 15, y); y += 4;
-  doc.text(invoice.client.address, 15, y); y += 4;
-  doc.text(`${invoice.client.postal_code} ${invoice.client.city}`, 15, y); y += 4;
-  if (invoice.client.country) {
-    doc.text(invoice.client.country, 15, y); y += 4;
+  doc.text(`NIF/CIF: ${client.nif}`, 15, y); y += 4;
+  doc.text(client.address, 15, y); y += 4;
+  doc.text(`${client.postal_code} ${client.city}`, 15, y); y += 4;
+  if (client.country) {
+    doc.text(client.country, 15, y); y += 4;
   }
 
   y += 8;
@@ -147,7 +149,7 @@ export function generateInvoicePDF(invoice: Invoice): Buffer {
     doc.text(`Notas: ${invoice.notes}`, 15, y); y += 4;
   }
 
-  doc.text(`Condiciones de pago: ${invoice.client.payment_terms || 30} días`, 15, y); y += 4;
+  doc.text(`Condiciones de pago: ${client.payment_terms || 30} días`, 15, y); y += 4;
   doc.text(`${COMPANY.name} | CIF: ${COMPANY.cif}`, 15, y); y += 4;
   doc.text(`${COMPANY.address}, ${COMPANY.city}`, 15, y);
 

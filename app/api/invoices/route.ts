@@ -3,7 +3,13 @@ import { getInvoices, createInvoice, type InvoiceItem } from "@/lib/invoice-stor
 import { generateInvoicePDF } from "@/lib/invoice-pdf";
 
 export async function GET() {
-  return Response.json({ invoices: getInvoices() });
+  try {
+    const invoices = await getInvoices();
+    return Response.json({ invoices });
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : "Unknown error";
+    return Response.json({ error: message }, { status: 500 });
+  }
 }
 
 export async function POST(request: NextRequest) {
@@ -11,18 +17,23 @@ export async function POST(request: NextRequest) {
 
   // Generate PDF mode
   if (body.action === "pdf" && body.invoice_id) {
-    const invoices = getInvoices();
-    const invoice = invoices.find((i) => i.id === body.invoice_id);
-    if (!invoice) {
-      return Response.json({ error: "Invoice not found" }, { status: 404 });
+    try {
+      const invoices = await getInvoices();
+      const invoice = invoices.find((i) => i.id === body.invoice_id);
+      if (!invoice) {
+        return Response.json({ error: "Invoice not found" }, { status: 404 });
+      }
+      const pdfBuffer = generateInvoicePDF(invoice);
+      return new Response(new Uint8Array(pdfBuffer), {
+        headers: {
+          "Content-Type": "application/pdf",
+          "Content-Disposition": `attachment; filename="${invoice.number}.pdf"`,
+        },
+      });
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : "Unknown error";
+      return Response.json({ error: message }, { status: 500 });
     }
-    const pdfBuffer = generateInvoicePDF(invoice);
-    return new Response(new Uint8Array(pdfBuffer), {
-      headers: {
-        "Content-Type": "application/pdf",
-        "Content-Disposition": `attachment; filename="${invoice.number}.pdf"`,
-      },
-    });
   }
 
   // Create invoice
@@ -36,18 +47,22 @@ export async function POST(request: NextRequest) {
     unit_price: item.unit_price || 0,
   }));
 
-  const invoice = createInvoice({
-    client_id: body.client_id,
-    items,
-    notes: body.notes || "",
-    recurring: body.recurring || null,
-    irpf_rate: body.irpf_rate || 0,
-  });
+  try {
+    const invoice = await createInvoice({
+      client_id: body.client_id,
+      items,
+      notes: body.notes || "",
+      recurring: body.recurring || null,
+      irpf_rate: body.irpf_rate || 0,
+    });
 
-  if (!invoice) {
-    return Response.json({ error: "Client not found" }, { status: 404 });
+    if (!invoice) {
+      return Response.json({ error: "Client not found" }, { status: 404 });
+    }
+
+    return Response.json({ invoice }, { status: 201 });
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : "Unknown error";
+    return Response.json({ error: message }, { status: 500 });
   }
-
-  // Auto-generate PDF and return invoice data
-  return Response.json({ invoice }, { status: 201 });
 }
