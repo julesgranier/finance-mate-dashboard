@@ -101,18 +101,32 @@ export default function InvoicesPage() {
     setCreating(false);
   }
 
+  const [creatingClient, setCreatingClient] = useState(false);
+  const [clientMsg, setClientMsg] = useState("");
+
   async function handleCreateClient() {
-    const res = await fetch("/api/clients", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(newClient),
-    });
-    if (res.ok) {
-      const data = await res.json();
-      setClients(prev => [...prev, data.client]);
-      setNewClient({ name: "", legal_name: "", nif: "", email: "", address: "", city: "", postal_code: "", country: "España", payment_terms: 30 });
-      setView("create");
+    setCreatingClient(true);
+    setClientMsg("");
+    try {
+      const res = await fetch("/api/clients", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(newClient),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setClients(prev => [...prev, data.client]);
+        setClientMsg(`✓ Client "${data.client.name}" créé`);
+        setNewClient({ name: "", legal_name: "", nif: "", email: "", address: "", city: "", postal_code: "", country: "España", payment_terms: 30 });
+        setTimeout(() => { setClientMsg(""); setView("create"); }, 1500);
+      } else {
+        const err = await res.json();
+        setClientMsg(`Erreur: ${err.error}`);
+      }
+    } catch {
+      setClientMsg("Erreur de connexion");
     }
+    setCreatingClient(false);
   }
 
   async function downloadPDF(invoice: Invoice) {
@@ -412,13 +426,20 @@ export default function InvoicesPage() {
                 </div>
               </div>
 
-              <button
-                onClick={handleCreateClient}
-                disabled={!newClient.name || !newClient.legal_name || !newClient.nif}
-                className="bg-white text-black text-[14px] font-semibold px-6 py-2.5 rounded-lg hover:bg-[#ddd] disabled:opacity-30 transition-colors duration-150 mt-4 cursor-pointer"
-              >
-                Créer le client
-              </button>
+              <div className="flex items-center gap-4 mt-4">
+                <button
+                  onClick={handleCreateClient}
+                  disabled={creatingClient || !newClient.name || !newClient.legal_name || !newClient.nif}
+                  className="bg-white text-black text-[14px] font-semibold px-6 py-2.5 rounded-lg hover:bg-[#ddd] disabled:opacity-30 transition-colors duration-150 cursor-pointer"
+                >
+                  {creatingClient ? "Création..." : "Créer le client"}
+                </button>
+                {clientMsg && (
+                  <span className={`text-[13px] ${clientMsg.startsWith("✓") ? "text-[#4ADE80]" : "text-[#F87171]"}`}>
+                    {clientMsg}
+                  </span>
+                )}
+              </div>
             </div>
           )}
 
